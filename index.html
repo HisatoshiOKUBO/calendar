@@ -2428,8 +2428,8 @@ async function exportExcel(year, month, rangeStart, rangeEnd){
   //   例) records テーブルの record_date 列なら:
   //       LIME_TABLE = 'records';  LIME_DATE_COL = 'record_date';
   // ════════════════════════════════════════════
-  const LIME_TABLE    = 'lime_records';        // ← 石灰散布の実テーブル名
-  const LIME_DATE_COL = 'implementation_date'; // ← その日付列名
+  const LIME_TABLE    = 'lime_spread_records';  // ← 石灰散布の実テーブル名
+  const LIME_DATE_COL = 'record_date';          // ← その日付列名
 
   const dpart = str => `${_ymd(str).d}日`;
 
