@@ -2419,46 +2419,88 @@ async function exportExcel(year, month, rangeStart, rangeEnd){
   const hygRows = await makeEventRows('haccp_hyg');
   const eduRows = await makeEventRows('haccp_edu');
 
-  // 専用テーブルから追記（Supabase上の同一DBに統合。データが無ければ何も足さない）
+  // ════════════════════════════════════════════
+  // 専用テーブルから追記（実データのある実テーブルを参照）
+  //
+  // ★石灰散布(LIME_TABLE)だけは要確認★
+  //   実データのテーブル名・日付列が未確定のため、ここで一元管理しています。
+  //   確定したら下の2つを実テーブルに合わせて書き換えてください。
+  //   例) records テーブルの record_date 列なら:
+  //       LIME_TABLE = 'records';  LIME_DATE_COL = 'record_date';
+  // ════════════════════════════════════════════
+  const LIME_TABLE    = 'lime_records';        // ← 石灰散布の実テーブル名
+  const LIME_DATE_COL = 'implementation_date'; // ← その日付列名
+
   const dpart = str => `${_ymd(str).d}日`;
+
+  // 1. 石灰散布 → 一般衛生プログラム欄
   try {
-    const { data } = await sb.from('lime_records').select('implementation_date')
-      .gte('implementation_date', rangeStart).lte('implementation_date', rangeEnd)
-      .order('implementation_date');
+    const { data } = await sb.from(LIME_TABLE).select(LIME_DATE_COL)
+      .gte(LIME_DATE_COL, rangeStart).lte(LIME_DATE_COL, rangeEnd)
+      .order(LIME_DATE_COL);
     if (data && data.length)
-      hygRows.push(data.map(r=>dpart(r.implementation_date)).join('、') + '　石灰散布');
-  } catch(e){}
+      hygRows.push(data.map(r=>dpart(r[LIME_DATE_COL])).join('、') + '　石灰散布');
+  } catch(e){ console.warn('lime抽出失敗:', e.message); }
+
+  // 2. 防護柵点検 → 一般衛生プログラム欄（fence_inspection_records）
+  //    item_type: 'inspection'=点検 / 'mowing'=除草、日付は inspection_date
   try {
-    const { data } = await sb.from('fence_records').select('inspection_date')
-      .not('inspection_date','is',null)
+    const { data } = await sb.from('fence_inspection_records').select('inspection_date')
+      .eq('item_type', 'inspection')
       .gte('inspection_date', rangeStart).lte('inspection_date', rangeEnd)
       .order('inspection_date');
     if (data && data.length)
       hygRows.push(data.map(r=>dpart(r.inspection_date)).join('、') + '　防護柵点検（点検）');
-  } catch(e){}
+  } catch(e){ console.warn('fence(点検)抽出失敗:', e.message); }
   try {
-    const { data } = await sb.from('fence_records').select('weeding_date')
-      .not('weeding_date','is',null)
-      .gte('weeding_date', rangeStart).lte('weeding_date', rangeEnd)
-      .order('weeding_date');
+    const { data } = await sb.from('fence_inspection_records').select('inspection_date')
+      .eq('item_type', 'mowing')
+      .gte('inspection_date', rangeStart).lte('inspection_date', rangeEnd)
+      .order('inspection_date');
     if (data && data.length)
-      hygRows.push(data.map(r=>dpart(r.weeding_date)).join('、') + '　防護柵点検（除草）');
-  } catch(e){}
+      hygRows.push(data.map(r=>dpart(r.inspection_date)).join('、') + '　防護柵点検（除草）');
+  } catch(e){ console.warn('fence(除草)抽出失敗:', e.message); }
+
+  // 3. 外部コミュニケーション → 外部コミュニケーション欄（comm_records）
+  //    出力形式：「日付　所属先　特記事項　対応者：名字」
+  //    externals  : jsonb 配列 [{org, name}, ...] → org を使用
+  //    respondents: jsonb 配列 [{name}, ...]      → 名字(姓)のみ使用
+  //    ※Supabaseの jsonb は取得時点でJSオブジェクト/配列に変換済み（JSON.parse不要）
   try {
-    const { data } = await sb.from('ext_comm_records').select('*')
-      .gte('implementation_date', rangeStart).lte('implementation_date', rangeEnd)
-      .order('implementation_date');
+    const { data } = await sb.from('comm_records')
+      .select('impl_date, externals, respondents, remarks')
+      .gte('impl_date', rangeStart).lte('impl_date', rangeEnd)
+      .order('impl_date');
     if (data) for (const ec of data){
-      let line = dpart(ec.implementation_date);
-      if (ec.comm_partner) line += '　' + ec.comm_partner;
-      if (ec.special_note) line += '　' + ec.special_note.trim();
-      if (ec.handler){
-        const surname = ec.handler.trim().split(/[\s　]+/)[0];
-        if (surname) line += '　対応者：' + surname;
+      const datePart = dpart(ec.impl_date);
+
+      const externals = Array.isArray(ec.externals) ? ec.externals : [];
+      const orgParts = [];
+      for (const ext of externals){
+        const org = (ext && typeof ext === 'object')
+          ? String(ext.org || '').trim() : String(ext).trim();
+        if (org) orgParts.push(org);
       }
+      const orgStr = orgParts.join('、');
+
+      const respondents = Array.isArray(ec.respondents) ? ec.respondents : [];
+      const lastNames = [];
+      for (const resp of respondents){
+        const full = (resp && typeof resp === 'object')
+          ? String(resp.name || resp.org || '').trim() : String(resp).trim();
+        if (full) lastNames.push(full.split(/[\s　]+/)[0]); // 姓のみ
+      }
+      const handlerStr = lastNames.filter(Boolean).join('・');
+
+      const note = String(ec.remarks || '').trim();
+
+      let line = datePart;
+      if (orgStr)     line += '　' + orgStr;
+      if (note)       line += '　' + note;
+      if (handlerStr) line += '　対応者：' + handlerStr;
       extRows.push(line);
     }
-  } catch(e){}
+  } catch(e){ console.warn('extcomm抽出失敗:', e.message); }
 
   const rows = [];
   const appendItem = (no, lbl, baseComment, evalv, autoRows) => {
