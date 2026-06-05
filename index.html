@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>サイボクファーム カレンダー</title>
+
+<!-- ▼ PWA 設定 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2D5016">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="サイボクカレンダー">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
 <!-- ▼ 移行用ライブラリ（CDN）＋設定ファイル -->
 <script src="config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -2841,6 +2851,21 @@ function showToast(msg, duration = 2500) {
   t.textContent = msg;
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), duration);
+}
+
+// ════════════════════════════════════════════
+// PWA: Service Worker 登録
+// ════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(registration => {
+        console.log('[PWA] Service Worker 登録完了:', registration.scope);
+      })
+      .catch(error => {
+        console.warn('[PWA] Service Worker 登録失敗:', error);
+      });
+  });
 }
 
 // ════════════════════════════════════════════
