@@ -1325,6 +1325,166 @@ body {
 
 /* 画面表示時は印刷ヘッダーを隠す */
 #print-header { display: none; }
+/* ── HELP BUTTON ── */
+.help-btn {
+  background: none;
+  border: 1px solid rgba(45,80,22,.25);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--green);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-tap-highlight-color: transparent;
+  transition: background .15s, color .15s;
+  flex-shrink: 0;
+}
+.help-btn:hover, .help-btn:active {
+  background: var(--green-bg);
+  border-color: var(--green);
+}
+
+/* ── HELP MODAL ── */
+.help-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.50);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .22s;
+  padding: 16px;
+}
+.help-modal-backdrop.open {
+  opacity: 1;
+  pointer-events: all;
+}
+.help-modal {
+  background: var(--white);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 680px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 24px 20px calc(20px + env(safe-area-inset-bottom));
+  transform: translateY(24px) scale(.97);
+  transition: transform .25s cubic-bezier(.4,0,.2,1);
+  box-shadow: 0 12px 48px rgba(0,0,0,.22);
+}
+.help-modal-backdrop.open .help-modal {
+  transform: translateY(0) scale(1);
+}
+.help-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--green);
+}
+.help-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.help-section {
+  margin-bottom: 22px;
+}
+.help-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--green);
+  background: var(--green-bg);
+  border-left: 4px solid var(--green);
+  padding: 6px 10px;
+  border-radius: 0 6px 6px 0;
+  margin-bottom: 10px;
+}
+.help-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.7;
+  align-items: flex-start;
+}
+.help-item-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--amber);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.help-item-body {
+  flex: 1;
+}
+.help-item-body strong {
+  color: var(--green);
+  display: block;
+  margin-bottom: 2px;
+}
+.help-badge-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.help-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.help-badge.blue   { background: var(--blue-bg);  color: var(--blue); }
+.help-badge.green  { background: var(--green-bg); color: var(--green); }
+.help-badge.orange { background: var(--amber-bg); color: #7A4F00; }
+.help-badge.red    { background: var(--red-bg);   color: var(--red); }
+.help-badge.hb { color: var(--white); font-size: 11px; }
+.help-badge.hb-h    { background: #F57F17; }
+.help-badge.hb-int  { background: #1565C0; }
+.help-badge.hb-hyg  { background: #2E7D32; }
+.help-badge.hb-edu  { background: #C62828; }
+.help-badge.hb-plan { background: #E65100; }
+.help-tip {
+  background: var(--amber-bg);
+  border: 1px solid var(--amber);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 12px;
+  color: #7A4F00;
+  line-height: 1.7;
+  margin-top: 8px;
+}
+.help-tip::before {
+  content: '💡 ';
+  font-weight: 700;
+}
+.help-divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 16px 0;
+}
+
 
 @media (min-width: 768px) {
   .app-title { font-size: 18px; }
@@ -1352,6 +1512,9 @@ body {
     <button class="tab-btn"        data-view="year"   onclick="switchView('year')">年</button>
     <button class="tab-btn"        data-view="haccp"  onclick="switchView('haccp')">HACCP記録</button>
     </nav>
+    <button class="help-btn" onclick="openHelp()" title="使い方ガイド">
+      <span>❓</span><span>ヘルプ</span>
+    </button>
   </div>
 </header>
 
@@ -1514,6 +1677,173 @@ body {
     <div class="modal-actions" style="margin-top:20px;">
       <button class="btn-primary" onclick="doExport()">ダウンロード</button>
     </div>
+  </div>
+</div>
+
+<!-- ── HELP MODAL ── -->
+<div class="help-modal-backdrop" id="helpModal">
+  <div class="help-modal" role="dialog" aria-modal="true" aria-label="ヘルプ">
+    <div class="help-modal-header">
+      <span class="help-modal-title">📖 使い方ガイド</span>
+      <button class="modal-close" onclick="closeHelp()" aria-label="閉じる">×</button>
+    </div>
+
+    <!-- ① 基本操作 -->
+    <div class="help-section">
+      <div class="help-section-title">① 画面の切り替え</div>
+      <div class="help-item">
+        <div class="help-item-icon">月</div>
+        <div class="help-item-body">
+          <strong>月ビュー</strong>
+          1ヶ月の予定を一覧表示します。行が「日付」、列が「部署」です。カレンダーの空きセルをタップすると、その日・部署に予定を追加できます。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">週</div>
+        <div class="help-item-body">
+          <strong>週ビュー</strong>
+          1週間（月〜日）の予定を部署ごとに表示します。列ヘッダーの日付をタップすると日ビューへ移動します。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">日</div>
+        <div class="help-item-body">
+          <strong>日ビュー</strong>
+          1日の予定を時刻順にリスト表示します。予定のない日は空白エリアをタップして追加できます。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">年</div>
+        <div class="help-item-body">
+          <strong>年ビュー</strong>
+          12ヶ月のミニカレンダーを表示します。予定のある日にはオレンジの点が表示されます。月名や日付をタップして詳細ビューへ移動できます。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon" style="font-size:9px;letter-spacing:-.5px">HA</div>
+        <div class="help-item-body">
+          <strong>HACCP記録</strong>
+          HACCP会議資料（資料①Word・資料②Excel）を期間指定してダウンロードできます。
+        </div>
+      </div>
+    </div>
+    <hr class="help-divider">
+
+    <!-- ② ナビゲーション -->
+    <div class="help-section">
+      <div class="help-section-title">② 期間の移動と絞り込み</div>
+      <div class="help-item">
+        <div class="help-item-icon">‹›</div>
+        <div class="help-item-body">
+          <strong>前へ・次へボタン</strong>
+          ビューに応じて1ヶ月・1週・1日・1年ずつ移動します。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">🏢</div>
+        <div class="help-item-body">
+          <strong>部署フィルター</strong>
+          「全部署」を選ぶと全部署の予定が表示されます。特定の部署を選ぶと、「全体」と選択した部署の予定のみ表示されます。
+        </div>
+      </div>
+    </div>
+    <hr class="help-divider">
+
+    <!-- ③ 予定の追加・編集 -->
+    <div class="help-section">
+      <div class="help-section-title">③ 予定を追加・編集する</div>
+      <div class="help-item">
+        <div class="help-item-icon">＋</div>
+        <div class="help-item-body">
+          <strong>予定を追加するには</strong>
+          右上の「＋ 追加」ボタンを押すか、月ビュー・週ビューの空きセルをタップします。タイトルと日付は必須です。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">✏️</div>
+        <div class="help-item-body">
+          <strong>予定を編集・削除するには</strong>
+          表示されている予定チップをタップすると編集画面が開きます。「削除」ボタンで削除できます。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">📅</div>
+        <div class="help-item-body">
+          <strong>複数日にまたがる予定</strong>
+          「終了日」を入力すると、その期間中の全日に予定が表示されます（例：研修3日間など）。
+        </div>
+      </div>
+      <div class="help-tip">
+        表示色は4種類から選べます：
+        <div class="help-badge-row" style="margin-top:6px">
+          <span class="help-badge blue">● 青：一般予定</span>
+          <span class="help-badge green">● 緑：HACCP関連</span>
+          <span class="help-badge orange">● オレンジ：重要</span>
+          <span class="help-badge red">● 赤：注意・警告</span>
+        </div>
+      </div>
+    </div>
+    <hr class="help-divider">
+
+    <!-- ④ HACCPバッジ -->
+    <div class="help-section">
+      <div class="help-section-title">④ HACCPバッジの見方</div>
+      <p style="font-size:13px;line-height:1.7;margin-bottom:8px;">
+        予定にHACCPチェックを入れると、カレンダー上に色付きバッジが表示されます。
+      </p>
+      <div class="help-badge-row">
+        <span class="help-badge hb hb-h">H：HACCP総合</span>
+        <span class="help-badge hb hb-int">内：内部コミュニケーション</span>
+        <span class="help-badge hb hb-hyg">一：一般衛生プログラム</span>
+        <span class="help-badge hb hb-edu">教：教育・訓練</span>
+        <span class="help-badge hb hb-plan">予：予定（資料①記載）</span>
+      </div>
+      <div class="help-tip">
+        「予」バッジが付いた予定は資料①のWord出力に自動で反映されます。
+        「内」「一」「教」バッジは資料②のExcel出力に反映されます。
+      </div>
+    </div>
+    <hr class="help-divider">
+
+    <!-- ⑤ 出力・印刷 -->
+    <div class="help-section">
+      <div class="help-section-title">⑤ 印刷・HACCP資料出力</div>
+      <div class="help-item">
+        <div class="help-item-icon">🖨️</div>
+        <div class="help-item-body">
+          <strong>印刷・PDF保存</strong>
+          コントロールバー右端のプリンタアイコンを押すと印刷プレビューが開きます。PDFとして保存することもできます。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">📄</div>
+        <div class="help-item-body">
+          <strong>資料①　Word出力</strong>
+          HACCPタブ →「資料① Word出力」を押し、期間を選んでダウンロードします。「予」フラグ付き予定がその他欄に自動入力されます。
+        </div>
+      </div>
+      <div class="help-item">
+        <div class="help-item-icon">📊</div>
+        <div class="help-item-body">
+          <strong>資料②　Excel出力</strong>
+          HACCPタブ →「資料② Excel出力」を押し、期間を選んでダウンロードします。「内・一・教」フラグ付き予定が各項目欄に自動入力されます。
+        </div>
+      </div>
+    </div>
+    <hr class="help-divider">
+
+    <!-- ⑥ デモモード -->
+    <div class="help-section">
+      <div class="help-section-title">⑥ オフライン・デモモードについて</div>
+      <p style="font-size:13px;line-height:1.7;">
+        インターネットに接続されていない場合や、データベースに接続できない場合は自動的に<strong style="color:var(--amber)">デモモード</strong>で動作します。
+        デモモードでは保存されたサンプルデータが表示されます。実際のデータはインターネット接続時に同期されます。
+      </p>
+      <div class="help-tip">
+        PWA（Progressive Web App）として端末にインストールすると、アイコンからアプリのように起動できます。iPhoneは「共有」→「ホーム画面に追加」、Androidは「インストール」ボタンを押してください。
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -2852,6 +3182,27 @@ function showToast(msg, duration = 2500) {
   t.classList.add('show');
   setTimeout(() => t.classList.remove('show'), duration);
 }
+
+
+// ════════════════════════════════════════════
+// HELP MODAL
+// ════════════════════════════════════════════
+function openHelp() {
+  document.getElementById('helpModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeHelp() {
+  document.getElementById('helpModal').classList.remove('open');
+  document.body.style.overflow = '';
+}
+// Escキーで閉じる
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeHelp();
+});
+// バックドロップクリックで閉じる
+document.getElementById('helpModal').addEventListener('click', function(e) {
+  if (e.target === this) closeHelp();
+});
 
 // ════════════════════════════════════════════
 // PWA: Service Worker 登録
