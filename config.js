@@ -16,7 +16,7 @@ window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXB
 //   3. 承認済みの JavaScript 生成元にこのアプリのURLを追加
 //   4. クライアント ID を以下に貼り付ける
 // ============================================================
-window.GOOGLE_CLIENT_ID  = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com';
+window.GOOGLE_CLIENT_ID  = '447438920690-hat2vst7neccq76jlu3v5etuo0behkkb.apps.googleusercontent.com';
 
 // 同期対象の Google カレンダー ID（通常は Googleアカウントのメールアドレス）
 // 特定のカレンダーに同期したい場合は Google カレンダー設定から ID をコピー
