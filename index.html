@@ -3891,6 +3891,11 @@ async function gcalPushToGoogle(start, end) {
   for (const ev of toExport) {
     try {
       const body = buildGcalEvent(ev, true);
+      // buildGcalEvent が null を返した場合（不正データ）はスキップ
+      if (!body) {
+        console.warn('[GCal] スキップ（不正データ）:', ev.title, ev.event_date);
+        continue;
+      }
       await gapi.client.request({
         path: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
         method: 'POST',
@@ -3899,7 +3904,9 @@ async function gcalPushToGoogle(start, end) {
       });
       ok++;
     } catch(e) {
-      console.warn('[GCal] push error:', ev.title, e);
+      // エラー詳細をコンソールに出力
+      const msg = e?.result?.error?.message || e?.message || String(e);
+      console.warn('[GCal] push error:', ev.title, ev.event_date, msg);
     }
   }
   return ok;
@@ -4093,16 +4100,25 @@ async function exportCurrentEventToGcal() {
   btn.textContent = '⏳ 書き出し中…';
 
   try {
+    const body = buildGcalEvent(evData, true);
+    if (!body) {
+      showToast('書き出し失敗: 日付または時刻の形式が正しくありません');
+      btn.disabled = false;
+      btn.innerHTML = '<span>📅</span> Googleカレンダーに送る';
+      return;
+    }
     const calId = encodeURIComponent(window.GOOGLE_CALENDAR_ID || 'primary');
     await gapi.client.request({
       path: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
       method: 'POST',
-      body: JSON.stringify(buildGcalEvent(evData, true)),
+      body: JSON.stringify(body),
       headers: { 'Content-Type': 'application/json' }
     });
     showToast('Googleカレンダーに追加しました');
   } catch(e) {
-    showToast('書き出し失敗: ' + (e.result?.error?.message || e.message || '不明なエラー'));
+    const msg = e?.result?.error?.message || e?.message || '不明なエラー';
+    console.warn('[GCal] exportCurrentEvent error:', msg, e);
+    showToast('書き出し失敗: ' + msg);
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<span>📅</span> Googleカレンダーに送る';
@@ -4112,6 +4128,9 @@ async function exportCurrentEventToGcal() {
 // ── サイボクイベント → Google Calendar イベント変換
 // withSyncTag=true のとき description に識別子を埋め込む
 function buildGcalEvent(ev, withSyncTag = false) {
+  // ① タイトルが空の場合はデフォルト値を使う（BadRequest対策）
+  const summary = (ev.title || '').trim() || '（タイトルなし）';
+
   const dept = ev.department || '';
   const syncTag = withSyncTag
     ? `\n[SAIBOKU_SYNC][SAIBOKU_ID:${ev.id}]`
@@ -4122,18 +4141,42 @@ function buildGcalEvent(ev, withSyncTag = false) {
     ev.is_haccp ? '【HACCP記録】' : '',
   ].filter(Boolean).join('\n') + syncTag;
 
-  if (ev.start_time) {
-    const endTime = ev.end_time || ev.start_time;
+  // ② start_time が HH:MM 形式かチェック（不正な値はnull扱い）
+  const startTimeRaw = (ev.start_time || '').trim();
+  const endTimeRaw   = (ev.end_time   || '').trim();
+  const timeRe = /^\d{2}:\d{2}$/;
+  const hasTime = timeRe.test(startTimeRaw);
+
+  if (hasTime) {
+    // ③ 終了時刻が開始時刻と同じなら+1時間に自動補正（BadRequest対策）
+    let endTime = timeRe.test(endTimeRaw) ? endTimeRaw : startTimeRaw;
+    if (endTime === startTimeRaw) {
+      const [h, m] = startTimeRaw.split(':').map(Number);
+      const endD = new Date(2000, 0, 1, h, m + 60);
+      endTime = `${String(endD.getHours()).padStart(2,'0')}:${String(endD.getMinutes()).padStart(2,'0')}`;
+    }
+    // ④ event_date が YYYY-MM-DD 形式かチェック
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ev.event_date || '')) {
+      console.warn('[GCal] 不正な日付:', ev.event_date, ev.title);
+      return null;
+    }
     return {
-      summary: ev.title,
+      summary,
       description: desc,
-      start: { dateTime: `${ev.event_date}T${ev.start_time}:00`, timeZone: 'Asia/Tokyo' },
-      end:   { dateTime: `${ev.event_date}T${endTime}:00`,       timeZone: 'Asia/Tokyo' },
+      start: { dateTime: `${ev.event_date}T${startTimeRaw}:00`, timeZone: 'Asia/Tokyo' },
+      end:   { dateTime: `${ev.event_date}T${endTime}:00`,      timeZone: 'Asia/Tokyo' },
     };
   } else {
-    const endDate = ev.end_date ? addDays(ev.end_date, 1) : addDays(ev.event_date, 1);
+    // 終日イベント：end.date は最終日の翌日
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(ev.event_date || '')) {
+      console.warn('[GCal] 不正な日付:', ev.event_date, ev.title);
+      return null;
+    }
+    const endDate = (ev.end_date && /^\d{4}-\d{2}-\d{2}$/.test(ev.end_date))
+      ? addDays(ev.end_date, 1)
+      : addDays(ev.event_date, 1);
     return {
-      summary: ev.title,
+      summary,
       description: desc,
       start: { date: ev.event_date },
       end:   { date: endDate },
