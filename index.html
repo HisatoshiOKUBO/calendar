@@ -3785,14 +3785,26 @@ async function gcalHandleToken(resp) {
     return;
   }
   gcalAccessToken = resp.access_token;
-  gapi.client.setToken({ access_token: gcalAccessToken });
 
+  // FedCMフロー対応：トークンが有効になるまで少し待つ
+  await new Promise(r => setTimeout(r, 300));
+
+  // ユーザー情報取得（401の場合はスキップしてサインイン済みとして扱う）
   try {
     const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
       headers: { Authorization: 'Bearer ' + gcalAccessToken }
     });
-    gcalUserProfile = await r.json();
-  } catch(e) {}
+    if (r.ok) {
+      gcalUserProfile = await r.json();
+    } else {
+      // 401でもアクセストークン自体は有効なケースがある（userinfo scopeなし等）
+      console.info('[GCal] userinfo取得スキップ (status:', r.status, ')');
+      gcalUserProfile = { name: 'Googleアカウント', email: '' };
+    }
+  } catch(e) {
+    console.info('[GCal] userinfo取得失敗（オフライン等）:', e.message);
+    gcalUserProfile = { name: 'Googleアカウント', email: '' };
+  }
 
   gcalUpdateUI();
   showToast('Googleアカウントに接続しました');

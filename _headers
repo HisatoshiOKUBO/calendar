@@ -1,0 +1,16 @@
+# Cloudflare Pages / Workers 用レスポンスヘッダー設定
+# このファイルをindex.htmlと同じディレクトリに置いてデプロイしてください
+
+/*
+  # クロスオリジン設定（Google OAuthのポップアップ通信を許可）
+  Cross-Origin-Opener-Policy: same-origin-allow-popups
+  Cross-Origin-Embedder-Policy: unsafe-none
+
+  # Tracking Prevention 対策（Edge / Safari）
+  # サードパーティCookieの制限を緩和
+  Permissions-Policy: storage-access=*
+
+  # セキュリティヘッダー
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
