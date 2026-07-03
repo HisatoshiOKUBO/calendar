@@ -7,6 +7,8 @@
 
 <!-- ▼ PWA 設定 -->
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
 <meta name="theme-color" content="#2D5016">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -3677,10 +3679,23 @@ let gcalGapiReady    = false;
 let gcalGisReady     = false;
 let gcalAutoSettings = { onOpen: false, onSave: false, rangeMonths: 3 };
 
-// ── 設定の永続化（localStorage）
+// ── ストレージ（localStorage が使えない環境はメモリのみ）
+const _store = (() => {
+  try {
+    localStorage.setItem('__test__', '1');
+    localStorage.removeItem('__test__');
+    return localStorage;
+  } catch(e) {
+    console.info('[GCal] localStorage unavailable (Tracking Prevention?) → in-memory only');
+    const mem = {};
+    return { getItem: k => mem[k] ?? null, setItem: (k,v) => { mem[k]=v; }, removeItem: k => { delete mem[k]; } };
+  }
+})();
+
+// ── 設定の永続化
 function gcalLoadSettings() {
   try {
-    const s = JSON.parse(localStorage.getItem(GCAL_STORE_KEY) || '{}');
+    const s = JSON.parse(_store.getItem(GCAL_STORE_KEY) || '{}');
     gcalAutoSettings = {
       onOpen:      !!s.onOpen,
       onSave:      !!s.onSave,
@@ -3692,7 +3707,7 @@ function gcalSaveAutoSettings() {
   gcalAutoSettings.onOpen      = document.getElementById('gcalAutoOnOpen').checked;
   gcalAutoSettings.onSave      = document.getElementById('gcalAutoOnSave').checked;
   gcalAutoSettings.rangeMonths = parseInt(document.getElementById('gcalAutoRangeSel').value) || 3;
-  try { localStorage.setItem(GCAL_STORE_KEY, JSON.stringify(gcalAutoSettings)); } catch(e) {}
+  try { _store.setItem(GCAL_STORE_KEY, JSON.stringify(gcalAutoSettings)); } catch(e) {}
   gcalUpdateHeaderIndicator();
 }
 gcalLoadSettings();
