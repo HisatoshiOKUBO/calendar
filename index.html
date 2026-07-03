@@ -3788,7 +3788,7 @@ async function gcalHandleToken(resp) {
 
 // ── 自動双方向同期（コアロジック）
 async function gcalAutoSync(trigger) {
-  if (!gcalAccessToken || !gcalGapiReady) return;
+  if (!gcalAccessToken) return;
 
   const [start, end] = gcalAutoRange();
   console.log(`[GCal] 自動同期 (${trigger}): ${start} ～ ${end}`);
@@ -3830,22 +3830,40 @@ function gcalUpdateHeaderIndicator() {
   dot.style.display = (gcalAccessToken && active) ? '' : 'none';
 }
 
+// ── Google Calendar API を fetch で直接呼ぶヘルパー
+async function gcalFetch(path, method, params, body) {
+  let url = 'https://www.googleapis.com/calendar/v3' + path;
+  if (params && Object.keys(params).length) {
+    url += '?' + new URLSearchParams(params).toString();
+  }
+  const opts = {
+    method,
+    headers: {
+      Authorization: 'Bearer ' + gcalAccessToken,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw Object.assign(new Error(err?.error?.message || res.statusText), { status: res.status, result: err });
+  }
+  return res.status === 204 ? {} : res.json();
+}
+
 // ── Googleから読み込んでstateに追記
 async function gcalFetchAndMerge(start, end) {
   const calId = encodeURIComponent(window.GOOGLE_CALENDAR_ID || 'primary');
-  const resp = await gapi.client.request({
-    path: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
-    method: 'GET',
-    params: {
-      timeMin: start + 'T00:00:00+09:00',
-      timeMax: end   + 'T23:59:59+09:00',
-      singleEvents: true,
-      orderBy: 'startTime',
-      maxResults: 500,
-    }
+  const data = await gcalFetch(`/calendars/${calId}/events`, 'GET', {
+    timeMin: start + 'T00:00:00+09:00',
+    timeMax: end   + 'T23:59:59+09:00',
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    maxResults: 500,
   });
 
-  const items = resp.result.items || [];
+  const items = data.items || [];
   const existingGcalIds = new Set(
     state.events.filter(e => e._gcalId).map(e => e._gcalId)
   );
@@ -3853,7 +3871,7 @@ async function gcalFetchAndMerge(start, end) {
   let added = 0;
   for (const item of items) {
     if (existingGcalIds.has(item.id)) continue;
-    // サイボクが書き出した予定は再取り込みしない（description に識別子を埋める）
+    // サイボクが書き出した予定は再取り込みしない
     if ((item.description || '').includes('[SAIBOKU_SYNC]')) continue;
 
     const startDate = (item.start.date || item.start.dateTime || '').slice(0, 10);
@@ -3894,21 +3912,16 @@ async function gcalPushToGoogle(start, end) {
   const calId = encodeURIComponent(window.GOOGLE_CALENDAR_ID || 'primary');
 
   // Google上の既存イベントを取得してSAIBOKU_SYNCタグ付きのIDを収集
-  const resp = await gapi.client.request({
-    path: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
-    method: 'GET',
-    params: {
-      timeMin: start + 'T00:00:00+09:00',
-      timeMax: end   + 'T23:59:59+09:00',
-      singleEvents: true,
-      maxResults: 500,
-      q: 'SAIBOKU_SYNC',
-    }
+  const existing = await gcalFetch(`/calendars/${calId}/events`, 'GET', {
+    timeMin: start + 'T00:00:00+09:00',
+    timeMax: end   + 'T23:59:59+09:00',
+    singleEvents: 'true',
+    maxResults: 500,
+    q: 'SAIBOKU_SYNC',
   });
 
-  // すでに同期済みのサイボクID集合
   const syncedSaibokuIds = new Set();
-  for (const item of (resp.result.items || [])) {
+  for (const item of (existing.items || [])) {
     const m = (item.description || '').match(/\[SAIBOKU_ID:([^\]]+)\]/);
     if (m) syncedSaibokuIds.add(m[1]);
   }
@@ -3922,24 +3935,17 @@ async function gcalPushToGoogle(start, end) {
 
   let ok = 0;
   for (const ev of toExport) {
+    const body = buildGcalEvent(ev, true);
+    if (!body) {
+      console.warn('[GCal] スキップ（不正データ）:', ev.title, ev.event_date);
+      continue;
+    }
     try {
-      const body = buildGcalEvent(ev, true);
-      // buildGcalEvent が null を返した場合（不正データ）はスキップ
-      if (!body) {
-        console.warn('[GCal] スキップ（不正データ）:', ev.title, ev.event_date);
-        continue;
-      }
-      await gapi.client.request({
-        path: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
-        method: 'POST',
-        body: JSON.stringify(body),
-        headers: { 'Content-Type': 'application/json' }
-      });
+      await gcalFetch(`/calendars/${calId}/events`, 'POST', {}, body);
       ok++;
     } catch(e) {
-      // エラー詳細をコンソールに出力
       const msg = e?.result?.error?.message || e?.message || String(e);
-      console.warn('[GCal] push error:', ev.title, ev.event_date, msg);
+      console.warn('[GCal] push error:', ev.title, ev.event_date, `(${e.status})`, msg);
     }
   }
   return ok;
@@ -4047,7 +4053,6 @@ function setGcalRange(type) {
 // ── 手動：Googleへ書き出し
 async function exportToGcal() {
   if (!gcalAccessToken) { showToast('先にGoogleサインインしてください'); return; }
-  if (!gcalGapiReady)   { showToast('Google APIの準備中です。しばらくお待ちください'); return; }
 
   const start = document.getElementById('gcalStart').value;
   const end   = document.getElementById('gcalEnd').value;
@@ -4076,7 +4081,6 @@ async function exportToGcal() {
 // ── 手動：Googleから読み込み
 async function importFromGcal() {
   if (!gcalAccessToken) { showToast('先にGoogleサインインしてください'); return; }
-  if (!gcalGapiReady)   { showToast('Google APIの準備中です'); return; }
 
   const start = document.getElementById('gcalStart').value;
   const end   = document.getElementById('gcalEnd').value;
@@ -4110,7 +4114,6 @@ async function importFromGcal() {
 // ── 現在編集中のイベントを1件書き出し
 async function exportCurrentEventToGcal() {
   if (!gcalAccessToken) { showToast('先にGoogle連携ボタンでサインインしてください'); return; }
-  if (!gcalGapiReady)   { showToast('Google APIの準備中です'); return; }
 
   const id    = document.getElementById('eventId').value;
   const title = document.getElementById('evTitle').value.trim();
@@ -4136,21 +4139,14 @@ async function exportCurrentEventToGcal() {
     const body = buildGcalEvent(evData, true);
     if (!body) {
       showToast('書き出し失敗: 日付または時刻の形式が正しくありません');
-      btn.disabled = false;
-      btn.innerHTML = '<span>📅</span> Googleカレンダーに送る';
       return;
     }
     const calId = encodeURIComponent(window.GOOGLE_CALENDAR_ID || 'primary');
-    await gapi.client.request({
-      path: `https://www.googleapis.com/calendar/v3/calendars/${calId}/events`,
-      method: 'POST',
-      body: JSON.stringify(body),
-      headers: { 'Content-Type': 'application/json' }
-    });
+    await gcalFetch(`/calendars/${calId}/events`, 'POST', {}, body);
     showToast('Googleカレンダーに追加しました');
   } catch(e) {
     const msg = e?.result?.error?.message || e?.message || '不明なエラー';
-    console.warn('[GCal] exportCurrentEvent error:', msg, e);
+    console.warn('[GCal] exportCurrentEvent error:', e?.status, msg);
     showToast('書き出し失敗: ' + msg);
   } finally {
     btn.disabled = false;
