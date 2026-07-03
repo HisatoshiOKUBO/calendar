@@ -4197,11 +4197,12 @@ function buildGcalEvent(ev, withSyncTag = false) {
     ev.is_haccp ? '【HACCP記録】' : '',
   ].filter(Boolean).join('\n') + syncTag;
 
-  // ② start_time が HH:MM 形式かチェック（不正な値はnull扱い）
-  const startTimeRaw = (ev.start_time || '').trim();
-  const endTimeRaw   = (ev.end_time   || '').trim();
+  // ② start_time が HH:MM または HH:MM:SS 形式かチェック（不正な値はnull扱い）
+  const startTimeRaw = (ev.start_time || '').trim().slice(0, 5); // HH:MM に正規化
+  const endTimeRaw   = (ev.end_time   || '').trim().slice(0, 5);
   const timeRe = /^\d{2}:\d{2}$/;
   const hasTime = timeRe.test(startTimeRaw);
+  console.debug('[GCal] buildGcalEvent:', ev.title, '| start_time原値:', ev.start_time, '→', startTimeRaw, '| hasTime:', hasTime);
 
   if (hasTime) {
     // ③ 終了時刻が開始時刻と同じなら+1時間に自動補正（BadRequest対策）
