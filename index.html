@@ -3934,11 +3934,11 @@ function toJST(isoStr) {
   return new Date(d.getTime() + 9 * 3600 * 1000).toISOString().replace('Z', '');
 }
 
-// ── サイボクの予定をGoogleへ書き出し（識別子タグで重複防止）
+// ── サイボクの予定をGoogleへ書き出し（新規追加 + 既存更新）
 async function gcalPushToGoogle(start, end) {
   const calId = encodeURIComponent(window.GOOGLE_CALENDAR_ID || 'primary');
 
-  // Google上の既存イベントを取得してSAIBOKU_SYNCタグ付きのIDを収集
+  // Google上の既存イベントを取得して SAIBOKU_ID → Google Event ID のマップを作る
   const existing = await gcalFetch(`/calendars/${calId}/events`, 'GET', {
     timeMin: start + 'T00:00:00+09:00',
     timeMax: end   + 'T23:59:59+09:00',
@@ -3947,32 +3947,41 @@ async function gcalPushToGoogle(start, end) {
     q: 'SAIBOKU_SYNC',
   });
 
-  const syncedSaibokuIds = new Set();
+  // saibokuId → googleEventId のマップ
+  const saibokuIdToGcalId = {};
   for (const item of (existing.items || [])) {
     const m = (item.description || '').match(/\[SAIBOKU_ID:([^\]]+)\]/);
-    if (m) syncedSaibokuIds.add(m[1]);
+    if (m) saibokuIdToGcalId[m[1]] = item.id;
   }
 
-  // 未同期のサイボク予定のみ書き出し
-  const toExport = state.events.filter(ev =>
+  // 対象のサイボク予定（Googleから取り込んだものは除く）
+  const toSync = state.events.filter(ev =>
     !ev._fromGcal &&
-    ev.event_date >= start && ev.event_date <= end &&
-    !syncedSaibokuIds.has(String(ev.id))
+    ev.event_date >= start && ev.event_date <= end
   );
 
   let ok = 0;
-  for (const ev of toExport) {
+  for (const ev of toSync) {
     const body = buildGcalEvent(ev, true);
     if (!body) {
       console.warn('[GCal] スキップ（不正データ）:', ev.title, ev.event_date);
       continue;
     }
     try {
-      await gcalFetch(`/calendars/${calId}/events`, 'POST', {}, body);
+      const existingGcalId = saibokuIdToGcalId[String(ev.id)];
+      if (existingGcalId) {
+        // 既存イベントを更新（PUT）
+        await gcalFetch(`/calendars/${calId}/events/${existingGcalId}`, 'PUT', {}, body);
+        console.debug('[GCal] 更新:', ev.title, ev.event_date);
+      } else {
+        // 新規追加（POST）
+        await gcalFetch(`/calendars/${calId}/events`, 'POST', {}, body);
+        console.debug('[GCal] 新規追加:', ev.title, ev.event_date);
+      }
       ok++;
     } catch(e) {
       const msg = e?.result?.error?.message || e?.message || String(e);
-      console.warn('[GCal] push error:', ev.title, ev.event_date, `(${e.status})`, msg);
+      console.warn('[GCal] push error:', ev.title, ev.event_date, `(${e?.status})`, msg);
     }
   }
   return ok;
