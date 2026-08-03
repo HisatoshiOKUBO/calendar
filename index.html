@@ -56,20 +56,12 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html {
-  height: 100%;
-}
-
 body {
   font-family: var(--font);
   background: var(--surface);
   color: var(--text);
   font-size: 14px;
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+  min-height: 100vh;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -82,7 +74,6 @@ body {
   top: 0;
   z-index: 100;
   box-shadow: 0 2px 6px rgba(0,0,0,.08);
-  flex-shrink: 0;
 }
 /* 1行目: SAIBOKUロゴのみ中央 */
 .header-row1 {
@@ -156,10 +147,6 @@ body {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-  position: sticky;
-  top: 0;
-  z-index: 90;
-  flex-shrink: 0;
 }
 .nav-btn {
   background: none;
@@ -230,12 +217,6 @@ body {
   padding: 12px;
   max-width: 1200px;
   margin: 0 auto;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
-  width: 100%;
 }
 
 /* ── YEAR VIEW ── */
@@ -3271,6 +3252,20 @@ async function exportExcel(year, month, rangeStart, rangeEnd){
     if (data && data.length)
       hygRows.push(data.map(r=>dpart(r.inspection_date)).join('、') + '　防護柵点検（除草）');
   } catch(e){ console.warn('fence(除草)抽出失敗:', e.message); }
+
+  // 3. 草刈り・除草記録 → 一般衛生プログラム欄（kusakari_records）
+  //    is_deleted=false の record_date のみ抽出。日付を重複排除して1行で列挙。
+  try {
+    const { data } = await sb.from('kusakari_records')
+      .select('record_date')
+      .eq('is_deleted', false)
+      .gte('record_date', rangeStart).lte('record_date', rangeEnd)
+      .order('record_date');
+    if (data && data.length) {
+      const uniq = [...new Set(data.map(r => dpart(r.record_date)))];
+      hygRows.push(uniq.join('、') + '　草刈り・除草');
+    }
+  } catch(e){ console.warn('kusakari抽出失敗:', e.message); }
 
   // 3. 外部コミュニケーション → 外部コミュニケーション欄（comm_records）
   //    出力形式：「日付　所属先　特記事項　対応者：名字」
